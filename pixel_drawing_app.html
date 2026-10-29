@@ -1,0 +1,851 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pixel Drawing App</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; }
+
+        :root {
+            --pixel-fg: #E2FF4E;
+            --canvas-bg: #F6FFC6;
+            --cell-size: 10px;
+        }
+
+        body {
+            margin: 0;
+            padding: 40px 20px;
+            background-color: #ffffff;
+            color: #1a1a2e;
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        header { margin-bottom: 32px; text-align: center; }
+        header h1 { margin: 0 0 6px; font-size: 26px; font-weight: 600; color: #1a1a2e; letter-spacing: -0.4px; }
+        header p  { margin: 0; font-size: 14px; color: #6b7280; }
+
+        .card {
+            background: #ffffff;
+            border-radius: 12px;
+            padding: 20px 24px;
+            margin-bottom: 20px;
+            width: fit-content;
+        }
+
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .controls + .controls {
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid #f0f0f0;
+        }
+
+        .ctrl-label {
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: #9ca3af;
+            padding: 0 2px;
+        }
+
+        .btn {
+            padding: 9px 18px;
+            font-size: 14px;
+            font-weight: 500;
+            font-family: inherit;
+            border: none;
+            background-color: #f0faf8;
+            color: #00897b;
+            cursor: pointer;
+            border-radius: 8px;
+            transition: background-color 0.15s, color 0.15s, box-shadow 0.15s;
+            letter-spacing: 0.01em;
+            display: inline-flex;
+            align-items: center;
+            text-decoration: none;
+        }
+
+        .btn:hover { background-color: #e0f5f1; color: #00796b; }
+
+        .btn.active {
+            background-color: #00897b;
+            color: #ffffff;
+            box-shadow: 0 2px 8px rgba(0, 137, 123, 0.35);
+        }
+
+        .btn.active:hover { background-color: #00796b; }
+
+        .btn-danger { background-color: #fff0f0; color: #e53935; }
+        .btn-danger:hover { background-color: #ffe0e0; color: #c62828; }
+
+        /* Small square buttons for direction arrows */
+        .btn-icon {
+            padding: 7px 10px;
+            font-size: 15px;
+            min-width: 34px;
+            justify-content: center;
+        }
+
+        .btn.hidden { display: none; }
+
+        .btn:disabled {
+            opacity: 0.55;
+            cursor: not-allowed;
+            pointer-events: none;
+        }
+
+        .divider { width: 1px; height: 28px; background: #e5e7eb; margin: 0 4px; }
+
+        /* ---- size slider ---- */
+        .size-slider {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 110px;
+            height: 4px;
+            border-radius: 2px;
+            background: #e5e7eb;
+            outline: none;
+            cursor: pointer;
+        }
+        .size-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 15px; height: 15px;
+            border-radius: 50%;
+            background: #374151;
+            cursor: pointer;
+        }
+        .size-slider::-moz-range-thumb {
+            width: 15px; height: 15px;
+            border-radius: 50%;
+            background: #374151;
+            border: none;
+            cursor: pointer;
+        }
+
+        .slider-label {
+            font-size: 13px;
+            color: #6b7280;
+            font-weight: 500;
+            white-space: nowrap;
+            min-width: 44px;
+            text-align: right;
+        }
+
+        /* ---- color swatches ---- */
+        .color-switcher { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+
+        .swatch {
+            width: 24px; height: 24px;
+            border-radius: 50%;
+            border: 2px solid transparent;
+            cursor: pointer;
+            padding: 0;
+            outline: none;
+            transition: transform 0.1s, box-shadow 0.1s;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+        }
+        .swatch:hover { transform: scale(1.15); }
+        .swatch.active {
+            border-color: #fff;
+            box-shadow: 0 0 0 2px rgba(0,0,0,0.25), 0 1px 3px rgba(0,0,0,0.15);
+            transform: scale(1.15);
+        }
+
+        /* ---- canvas layers ---- */
+        .grid-wrapper { border-radius: 12px; padding: 16px; display: inline-block; }
+
+        .grid-container {
+            position: relative;
+            width: 480px; height: 480px;
+            background-color: var(--canvas-bg);
+            border-radius: 6px;
+            border: 1px solid rgba(0,0,0,0.08);
+            overflow: hidden;
+        }
+
+        /* z-order: bg-photo-1 → pixel-bottom → mid-photo-2 → pixel-top */
+        .bg-image-1  { z-index: 0; }
+        .grid-bottom { z-index: 1; }
+        .bg-image-2  { z-index: 2; }
+        .grid-top    { z-index: 3; }
+
+        .grid {
+            display: grid;
+            position: absolute;
+            top: 0; left: 0;
+            width: 480px; height: 480px;
+        }
+
+        .bg-image {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            object-fit: cover;
+            pointer-events: none;
+            display: none;
+        }
+
+        .pixel {
+            width: var(--cell-size);
+            height: var(--cell-size);
+            background-color: transparent;
+            cursor: pointer;
+        }
+        .pixel:hover { background-color: rgba(0,0,0,0.07); }
+        .pixel.on { background-color: var(--pixel-fg); }
+        .pixel.on:hover { filter: brightness(0.9); }
+
+        /* layer badge */
+        .layer-badge {
+            display: none;
+            font-size: 11px; font-weight: 600;
+            letter-spacing: 0.04em; text-transform: uppercase;
+            color: #fff;
+            background: rgba(0,0,0,0.45);
+            border-radius: 4px;
+            padding: 2px 7px;
+            position: absolute;
+            top: 8px; right: 8px;
+            z-index: 10;
+            pointer-events: none;
+        }
+        .layer-badge.visible { display: block; }
+
+        /* ---- status & svg output ---- */
+        .status { margin-top: 16px; font-size: 13px; color: #9ca3af; text-align: center; }
+
+        #svgOutput { display: none; margin-top: 20px; width: 100%; max-width: 540px; }
+        #svgOutput h3 { margin: 0 0 12px; font-size: 14px; font-weight: 600; color: #374151; }
+        #svgOutput textarea {
+            width: 100%; height: 180px;
+            background: #f9fafb; color: #374151;
+            border: 1px solid #e5e7eb; border-radius: 8px;
+            padding: 12px;
+            font-family: 'SF Mono', 'Fira Code', monospace;
+            font-size: 12px; resize: vertical; outline: none;
+        }
+        #svgOutput textarea:focus { border-color: #00897b; box-shadow: 0 0 0 3px rgba(0,137,123,0.12); }
+        #svgOutput p { color: #9ca3af; font-size: 13px; margin: 10px 0 0; }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Pixel Drawing</h1>
+        <p>Create pixel art and export as SVG</p>
+    </header>
+
+    <div class="card">
+        <!-- Row 1: drawing tools + size -->
+        <div class="controls">
+            <button class="btn" id="penToggle">Pen Tool: OFF</button>
+            <div class="divider"></div>
+            <button class="btn" id="animateBtn">Animate</button>
+            <button class="btn hidden" id="stopAnimateBtn">Stop</button>
+            <button class="btn" id="saveSvg">Save SVG</button>
+            <div class="divider"></div>
+            <button class="btn btn-danger" id="clearCanvas">Clear</button>
+            <div class="divider"></div>
+            <span class="slider-label" id="sizeLabel">48 × 48</span>
+            <input type="range" class="size-slider" id="sizeSlider" min="10" max="48" value="10" step="1">
+        </div>
+
+        <!-- Row 2: photos + dual layer -->
+        <div class="controls">
+            <span class="ctrl-label">BG Photo</span>
+            <label class="btn" for="bgPhotoInput1">Add</label>
+            <input type="file" id="bgPhotoInput1" accept="image/*" style="display:none">
+            <button class="btn hidden" id="toggleBgPhoto1">Hide</button>
+            <button class="btn btn-danger hidden" id="deleteBgPhoto1">Remove</button>
+            <div class="divider"></div>
+            <span class="ctrl-label">Mid Photo</span>
+            <label class="btn" for="bgPhotoInput2">Add</label>
+            <input type="file" id="bgPhotoInput2" accept="image/*" style="display:none">
+            <button class="btn hidden" id="toggleBgPhoto2">Hide</button>
+            <button class="btn btn-danger hidden" id="deleteBgPhoto2">Remove</button>
+            <div class="divider"></div>
+            <button class="btn" id="dualLayerToggle">Dual Layer: OFF</button>
+            <button class="btn hidden" id="layerSwitcher">Layer: Top</button>
+        </div>
+
+        <!-- Row 3: animation direction + loop + export -->
+        <div class="controls">
+            <span class="ctrl-label">Direction</span>
+            <button class="btn btn-icon active" id="dirRight" data-dir="right">→</button>
+            <button class="btn btn-icon" id="dirLeft"  data-dir="left">←</button>
+            <button class="btn btn-icon" id="dirDown"  data-dir="down">↓</button>
+            <button class="btn btn-icon" id="dirUp"    data-dir="up">↑</button>
+            <div class="divider"></div>
+            <button class="btn active" id="loopToggle">Loop: ON</button>
+            <div class="divider"></div>
+            <button class="btn" id="exportSvgBtn">Anim SVG</button>
+            <button class="btn" id="exportVideoBtn">Export Video</button>
+        </div>
+    </div>
+
+    <div class="grid-wrapper">
+        <div class="color-switcher" id="colorSwitcher"></div>
+        <div class="grid-container" id="gridContainer">
+            <img class="bg-image bg-image-1" id="bgImage1" alt="">
+            <div class="grid grid-bottom" id="gridBottom"></div>
+            <img class="bg-image bg-image-2" id="bgImage2" alt="">
+            <div class="grid grid-top" id="gridTop"></div>
+            <span class="layer-badge" id="layerBadge">Top</span>
+        </div>
+    </div>
+
+    <div class="status" id="status">
+        Click pixels to toggle · Press P or enable Pen Tool to draw by hovering
+    </div>
+
+    <div id="svgOutput" class="card">
+        <h3>SVG Output</h3>
+        <textarea id="svgText" readonly></textarea>
+        <p>Copy and save as a .svg file</p>
+    </div>
+
+    <script>
+        class PixelDrawingApp {
+            constructor() {
+                this.penActive        = false;
+                this.gridSize         = 48;
+                this.animationId      = null;
+                this.animationTime    = 0;
+                this.isAnimating      = false;
+                this.dualLayerEnabled = false;
+                this.activeLayer      = 1;   // 0=bottom, 1=top; single-mode always top
+                this.direction        = 'right';
+                this.looped           = true;
+
+                this.grids         = [[], []];
+                this.originalGrids = [[], []];
+                this.gridElements  = [
+                    document.getElementById('gridBottom'),
+                    document.getElementById('gridTop'),
+                ];
+
+                this.photos = [
+                    { src: null, visible: false, el: document.getElementById('bgImage1') },
+                    { src: null, visible: false, el: document.getElementById('bgImage2') },
+                ];
+
+                this.penToggleBtn        = document.getElementById('penToggle');
+                this.saveSvgBtn          = document.getElementById('saveSvg');
+                this.clearCanvasBtn      = document.getElementById('clearCanvas');
+                this.animateBtn          = document.getElementById('animateBtn');
+                this.stopAnimateBtn      = document.getElementById('stopAnimateBtn');
+                this.statusEl            = document.getElementById('status');
+                this.svgOutput           = document.getElementById('svgOutput');
+                this.svgText             = document.getElementById('svgText');
+                this.sizeSlider          = document.getElementById('sizeSlider');
+                this.sizeLabel           = document.getElementById('sizeLabel');
+                this.dualLayerToggleBtn  = document.getElementById('dualLayerToggle');
+                this.layerSwitcherBtn    = document.getElementById('layerSwitcher');
+                this.layerBadge          = document.getElementById('layerBadge');
+                this.loopToggleBtn       = document.getElementById('loopToggle');
+                this.exportSvgBtn        = document.getElementById('exportSvgBtn');
+                this.exportVideoBtn      = document.getElementById('exportVideoBtn');
+
+                this.dirButtons = document.querySelectorAll('[data-dir]');
+
+                this.initializeGrid();
+                this.setupEventListeners();
+            }
+
+            /* ---- grid ---- */
+
+            initializeGrid() {
+                const pixelSize = 480 / this.gridSize;
+                document.documentElement.style.setProperty('--cell-size', `${pixelSize}px`);
+
+                this.gridElements.forEach((el, li) => {
+                    el.innerHTML = '';
+                    el.style.gridTemplateColumns = `repeat(${this.gridSize}, ${pixelSize}px)`;
+                    el.style.gridTemplateRows    = `repeat(${this.gridSize}, ${pixelSize}px)`;
+                    this.grids[li] = [];
+                    const total = this.gridSize * this.gridSize;
+                    for (let i = 0; i < total; i++) {
+                        const px = document.createElement('div');
+                        px.className = 'pixel';
+                        px.dataset.index = i;
+                        px.addEventListener('click',      e => this.handlePixelClick(e));
+                        px.addEventListener('mouseenter', e => this.handlePixelHover(e));
+                        el.appendChild(px);
+                        this.grids[li].push(false);
+                    }
+                });
+
+                this.applyLayerVisibility();
+            }
+
+            rebuildGrid(newSize) {
+                if (this.isAnimating) this.stopAnimation();
+                this.gridSize = newSize;
+                this.grids = [[], []];
+                this.svgOutput.style.display = 'none';
+                this.initializeGrid();
+            }
+
+            applyLayerVisibility() {
+                this.gridElements[0].style.display = this.dualLayerEnabled ? '' : 'none';
+                this.gridElements.forEach((el, i) => {
+                    el.style.pointerEvents = (i === this.activeLayer) ? 'auto' : 'none';
+                });
+                if (this.dualLayerEnabled) {
+                    this.layerBadge.textContent = this.activeLayer === 1 ? 'Top' : 'Bottom';
+                    this.layerBadge.classList.add('visible');
+                } else {
+                    this.layerBadge.classList.remove('visible');
+                }
+            }
+
+            /* ---- events ---- */
+
+            setupEventListeners() {
+                this.penToggleBtn.addEventListener('click', () => {
+                    this.penActive = !this.penActive;
+                    this.updatePenToggle();
+                    this.updateStatus();
+                });
+
+                this.saveSvgBtn.addEventListener('click',     () => this.generateStaticSvg());
+                this.clearCanvasBtn.addEventListener('click', () => this.clearAllPixels());
+                this.animateBtn.addEventListener('click',     () => this.startAnimation());
+                this.stopAnimateBtn.addEventListener('click', () => this.stopAnimation());
+
+                this.sizeSlider.addEventListener('input', () => {
+                    const pixelSize = snapPixelSize(parseInt(this.sizeSlider.value));
+                    const gridSize  = 480 / pixelSize;
+                    this.sizeLabel.textContent = `${gridSize} × ${gridSize}`;
+                    this.rebuildGrid(gridSize);
+                });
+
+                document.addEventListener('keydown', e => {
+                    if (e.key.toLowerCase() === 'p') {
+                        this.penActive = !this.penActive;
+                        this.updatePenToggle();
+                        this.updateStatus();
+                    }
+                });
+
+                // Photos
+                this.setupPhotoSlot(0, 'bgPhotoInput1', 'toggleBgPhoto1', 'deleteBgPhoto1');
+                this.setupPhotoSlot(1, 'bgPhotoInput2', 'toggleBgPhoto2', 'deleteBgPhoto2');
+
+                // Dual layer
+                this.dualLayerToggleBtn.addEventListener('click', () => {
+                    this.dualLayerEnabled = !this.dualLayerEnabled;
+                    this.dualLayerToggleBtn.textContent = `Dual Layer: ${this.dualLayerEnabled ? 'ON' : 'OFF'}`;
+                    this.dualLayerToggleBtn.classList.toggle('active', this.dualLayerEnabled);
+                    if (this.dualLayerEnabled) {
+                        this.activeLayer = 1;
+                        this.layerSwitcherBtn.textContent = 'Layer: Top';
+                        this.layerSwitcherBtn.classList.remove('hidden');
+                    } else {
+                        this.activeLayer = 1;
+                        this.layerSwitcherBtn.classList.add('hidden');
+                    }
+                    this.applyLayerVisibility();
+                });
+
+                this.layerSwitcherBtn.addEventListener('click', () => {
+                    this.activeLayer = this.activeLayer === 1 ? 0 : 1;
+                    this.layerSwitcherBtn.textContent = `Layer: ${this.activeLayer === 1 ? 'Top' : 'Bottom'}`;
+                    this.applyLayerVisibility();
+                });
+
+                // Direction
+                this.dirButtons.forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        this.direction = btn.dataset.dir;
+                        this.dirButtons.forEach(b => b.classList.remove('active'));
+                        btn.classList.add('active');
+                    });
+                });
+
+                // Loop toggle
+                this.loopToggleBtn.addEventListener('click', () => {
+                    this.looped = !this.looped;
+                    this.loopToggleBtn.textContent = `Loop: ${this.looped ? 'ON' : 'OFF'}`;
+                    this.loopToggleBtn.classList.toggle('active', this.looped);
+                });
+
+                // Export
+                this.exportSvgBtn.addEventListener('click',   () => this.exportAnimatedSVG());
+                this.exportVideoBtn.addEventListener('click', () => this.exportVideo());
+            }
+
+            setupPhotoSlot(slotIdx, inputId, toggleId, deleteId) {
+                const input     = document.getElementById(inputId);
+                const toggleBtn = document.getElementById(toggleId);
+                const deleteBtn = document.getElementById(deleteId);
+                const photo     = this.photos[slotIdx];
+
+                input.addEventListener('change', e => {
+                    const file = e.target.files[0];
+                    if (!file) return;
+                    if (photo.src) URL.revokeObjectURL(photo.src);
+                    photo.src     = URL.createObjectURL(file);
+                    photo.visible = true;
+                    photo.el.src           = photo.src;
+                    photo.el.style.display = 'block';
+                    toggleBtn.textContent  = 'Hide';
+                    toggleBtn.classList.remove('hidden');
+                    deleteBtn.classList.remove('hidden');
+                    input.value = '';
+                });
+
+                toggleBtn.addEventListener('click', () => {
+                    photo.visible = !photo.visible;
+                    photo.el.style.display = photo.visible ? 'block' : 'none';
+                    toggleBtn.textContent  = photo.visible ? 'Hide' : 'Show';
+                });
+
+                deleteBtn.addEventListener('click', () => {
+                    URL.revokeObjectURL(photo.src);
+                    photo.src = null; photo.visible = false;
+                    photo.el.src = ''; photo.el.style.display = 'none';
+                    toggleBtn.classList.add('hidden');
+                    deleteBtn.classList.add('hidden');
+                });
+            }
+
+            /* ---- drawing ---- */
+
+            handlePixelClick(event) {
+                if (!this.penActive) this.togglePixel(parseInt(event.target.dataset.index));
+            }
+
+            handlePixelHover(event) {
+                if (this.penActive) {
+                    const idx = parseInt(event.target.dataset.index);
+                    if (!this.grids[this.activeLayer][idx]) this.setPixel(idx, true);
+                }
+            }
+
+            togglePixel(index) {
+                this.grids[this.activeLayer][index] = !this.grids[this.activeLayer][index];
+                this.updatePixelVisual(index, this.activeLayer);
+            }
+
+            setPixel(index, state) {
+                this.grids[this.activeLayer][index] = state;
+                this.updatePixelVisual(index, this.activeLayer);
+            }
+
+            updatePixelVisual(index, layerIdx) {
+                const el = this.gridElements[layerIdx].children[index];
+                if (el) el.classList.toggle('on', this.grids[layerIdx][index]);
+            }
+
+            clearAllPixels() {
+                const g = this.grids[this.activeLayer];
+                for (let i = 0; i < g.length; i++) { g[i] = false; this.updatePixelVisual(i, this.activeLayer); }
+                this.svgOutput.style.display = 'none';
+            }
+
+            /* ---- UI ---- */
+
+            updatePenToggle() {
+                this.penToggleBtn.classList.toggle('active', this.penActive);
+                this.penToggleBtn.textContent = `Pen Tool: ${this.penActive ? 'ON' : 'OFF'}`;
+            }
+
+            updateStatus() {
+                this.statusEl.textContent = this.penActive
+                    ? 'Pen tool active — hover over pixels to draw'
+                    : 'Click pixels to toggle · Press P to activate pen tool';
+            }
+
+            /* ---- static SVG snapshot ---- */
+
+            generateStaticSvg() {
+                const pixelSize = 480 / this.gridSize;
+                const n = this.gridSize;
+                let svg = `<svg width="480" height="480" xmlns="http://www.w3.org/2000/svg">\n`;
+                const g = this.grids[this.activeLayer];
+                for (let i = 0; i < g.length; i++) {
+                    if (!g[i]) continue;
+                    const row = Math.floor(i / n), col = i % n;
+                    svg += `  <rect x="${col * pixelSize}" y="${row * pixelSize}" width="${pixelSize}" height="${pixelSize}" fill="white"/>\n`;
+                }
+                svg += '</svg>';
+                this.svgText.value = svg;
+                this.svgOutput.style.display = 'block';
+                this.svgText.select();
+            }
+
+            /* ---- animation core ---- */
+
+            // Pure function: given an original pixel position and time step, returns its animated position.
+            computePixelPosition(origRow, origCol, time, n, dir) {
+                let row, col;
+                // perpendicular sin-wave wobble (phase varies by position along the primary axis)
+                const perpWobble = t => Math.round(Math.sin(time * 0.2 + t * 0.1) * 3);
+
+                if (dir === 'right') {
+                    col = (origCol + time) % n;
+                    row = ((origRow + perpWobble(origCol)) % n + n) % n;
+                } else if (dir === 'left') {
+                    col = ((origCol - time) % n + n) % n;
+                    row = ((origRow + perpWobble(origCol)) % n + n) % n;
+                } else if (dir === 'down') {
+                    row = (origRow + time) % n;
+                    col = ((origCol + perpWobble(origRow)) % n + n) % n;
+                } else { // up
+                    row = ((origRow - time) % n + n) % n;
+                    col = ((origCol + perpWobble(origRow)) % n + n) % n;
+                }
+                return { row, col };
+            }
+
+            getExportGrids() {
+                // During animation, use the pre-animation snapshot; otherwise use current drawn state
+                return this.isAnimating ? this.originalGrids : this.grids;
+            }
+
+            getActiveLayers() {
+                return this.dualLayerEnabled ? [0, 1] : [1];
+            }
+
+            startAnimation() {
+                if (this.isAnimating) return;
+                this.isAnimating   = true;
+                this.animationTime = 0;
+                this.animateBtn.classList.add('hidden');
+                this.stopAnimateBtn.classList.remove('hidden');
+                this.originalGrids = [[...this.grids[0]], [...this.grids[1]]];
+
+                const tick = () => {
+                    if (!this.isAnimating) return;
+                    this.animationTime++;
+                    this.animateLayer(0);
+                    this.animateLayer(1);
+
+                    const cycleDone = !this.looped && this.animationTime >= this.gridSize;
+                    if (cycleDone) { this.stopAnimation(); return; }
+
+                    this.animationId = setTimeout(tick, 100);
+                };
+                tick();
+            }
+
+            stopAnimation() {
+                this.isAnimating = false;
+                clearTimeout(this.animationId);
+                this.animationId = null;
+                this.animateBtn.classList.remove('hidden');
+                this.stopAnimateBtn.classList.add('hidden');
+                // Restore both layers to pre-animation state
+                [0, 1].forEach(li => {
+                    this.grids[li] = [...this.originalGrids[li]];
+                    for (let i = 0; i < this.grids[li].length; i++) this.updatePixelVisual(i, li);
+                });
+            }
+
+            animateLayer(li) {
+                const grid = this.grids[li];
+                const orig = this.originalGrids[li];
+                const n    = this.gridSize;
+                for (let i = 0; i < grid.length; i++) { grid[i] = false; this.updatePixelVisual(i, li); }
+                for (let i = 0; i < orig.length; i++) {
+                    if (!orig[i]) continue;
+                    const origRow = Math.floor(i / n), origCol = i % n;
+                    const { row, col } = this.computePixelPosition(origRow, origCol, this.animationTime, n, this.direction);
+                    const idx = row * n + col;
+                    if (idx >= 0 && idx < grid.length) { grid[idx] = true; this.updatePixelVisual(idx, li); }
+                }
+            }
+
+            /* ---- animated SVG export ---- */
+
+            exportAnimatedSVG() {
+                const n          = this.gridSize;
+                const pixelSize  = 480 / n;
+                const frameCount = n;  // one full cycle = n steps
+                const frameDur   = 0.1; // seconds per frame (matches 100 ms tick)
+                const totalDur   = frameCount * frameDur;
+                const repeatCount = this.looped ? 'indefinite' : '1';
+                const fgColor    = getComputedStyle(document.documentElement).getPropertyValue('--pixel-fg').trim();
+                const bgColor    = getComputedStyle(document.documentElement).getPropertyValue('--canvas-bg').trim();
+
+                const baseGrids = this.getExportGrids();
+                const layers    = this.getActiveLayers();
+
+                // keyTimes: "0;0.02083;0.04167;..." one entry per frame
+                const keyTimes = Array.from({ length: frameCount }, (_, t) =>
+                    (t / frameCount).toFixed(5)
+                ).join(';');
+
+                let svg = `<svg width="480" height="480" xmlns="http://www.w3.org/2000/svg">\n`;
+                svg    += `  <rect width="480" height="480" fill="${bgColor}"/>\n`;
+
+                for (const li of layers) {
+                    const orig = baseGrids[li];
+                    for (let i = 0; i < orig.length; i++) {
+                        if (!orig[i]) continue;
+                        const origRow = Math.floor(i / n), origCol = i % n;
+
+                        const xVals = [], yVals = [];
+                        for (let t = 0; t < frameCount; t++) {
+                            const { row, col } = this.computePixelPosition(origRow, origCol, t, n, this.direction);
+                            xVals.push(col * pixelSize);
+                            yVals.push(row * pixelSize);
+                        }
+
+                        const x0 = xVals[0], y0 = yVals[0];
+                        svg += `  <rect x="${x0}" y="${y0}" width="${pixelSize}" height="${pixelSize}" fill="${fgColor}">\n`;
+                        svg += `    <animate attributeName="x" calcMode="discrete" values="${xVals.join(';')}" keyTimes="${keyTimes}" dur="${totalDur}s" repeatCount="${repeatCount}"/>\n`;
+                        svg += `    <animate attributeName="y" calcMode="discrete" values="${yVals.join(';')}" keyTimes="${keyTimes}" dur="${totalDur}s" repeatCount="${repeatCount}"/>\n`;
+                        svg += `  </rect>\n`;
+                    }
+                }
+
+                svg += '</svg>';
+                this.download(new Blob([svg], { type: 'image/svg+xml' }), 'pixel-animation.svg');
+            }
+
+            /* ---- video export ---- */
+
+            async exportVideo() {
+                if (!window.MediaRecorder) {
+                    alert('MediaRecorder is not supported in this browser. Try Chrome or Firefox.');
+                    return;
+                }
+
+                const n          = this.gridSize;
+                const pixelSize  = 480 / n;
+                const frameCount = n;
+                const frameDurMs = 100;
+                const fgColor    = getComputedStyle(document.documentElement).getPropertyValue('--pixel-fg').trim();
+                const bgColor    = getComputedStyle(document.documentElement).getPropertyValue('--canvas-bg').trim();
+
+                const baseGrids  = this.getExportGrids();
+                const layers     = this.getActiveLayers();
+
+                // Set up offscreen canvas
+                const canvas = document.createElement('canvas');
+                canvas.width = canvas.height = 480;
+                const ctx = canvas.getContext('2d');
+
+                const drawFrame = t => {
+                    ctx.fillStyle = bgColor;
+                    ctx.fillRect(0, 0, 480, 480);
+                    ctx.fillStyle = fgColor;
+                    for (const li of layers) {
+                        const orig = baseGrids[li];
+                        for (let i = 0; i < orig.length; i++) {
+                            if (!orig[i]) continue;
+                            const origRow = Math.floor(i / n), origCol = i % n;
+                            const { row, col } = this.computePixelPosition(origRow, origCol, t, n, this.direction);
+                            ctx.fillRect(col * pixelSize, row * pixelSize, pixelSize, pixelSize);
+                        }
+                    }
+                };
+
+                // Pick best supported MIME type
+                const mimeType = ['video/webm;codecs=vp9', 'video/webm', 'video/mp4']
+                    .find(t => MediaRecorder.isTypeSupported(t)) || 'video/webm';
+
+                const stream   = canvas.captureStream(10); // 10 fps
+                const recorder = new MediaRecorder(stream, { mimeType });
+                const chunks   = [];
+                recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+                recorder.onstop = () => {
+                    this.download(new Blob(chunks, { type: mimeType }), 'pixel-animation.webm');
+                    this.exportVideoBtn.textContent = 'Export Video';
+                    this.exportVideoBtn.disabled    = false;
+                    this.exportSvgBtn.disabled      = false;
+                };
+
+                this.exportVideoBtn.textContent = 'Exporting…';
+                this.exportVideoBtn.disabled    = true;
+                this.exportSvgBtn.disabled      = true;
+
+                // Draw initial frame before starting recorder so first frame is captured
+                drawFrame(0);
+                recorder.start();
+
+                await new Promise(resolve => {
+                    let t = 0;
+                    const interval = setInterval(() => {
+                        drawFrame(t++);
+                        if (t >= frameCount) {
+                            clearInterval(interval);
+                            // Give the stream a moment to flush the last frame
+                            setTimeout(() => { recorder.stop(); resolve(); }, 200);
+                        }
+                    }, frameDurMs);
+                });
+            }
+
+            /* ---- helpers ---- */
+
+            download(blob, filename) {
+                const url = URL.createObjectURL(blob);
+                const a   = Object.assign(document.createElement('a'), { href: url, download: filename });
+                a.click();
+                URL.revokeObjectURL(url);
+            }
+        }
+
+        /* ---- module-level helpers ---- */
+
+        const VALID_PIXEL_SIZES = [10, 12, 15, 16, 20, 24, 30, 32, 40, 48];
+
+        function snapPixelSize(val) {
+            return VALID_PIXEL_SIZES.reduce((prev, curr) =>
+                Math.abs(curr - val) < Math.abs(prev - val) ? curr : prev
+            );
+        }
+
+        const COLOR_PAIRS = [
+            { fg: '#E2FF4E', bg: '#F6FFC6' },
+            { fg: '#F2DDC7', bg: '#FDF1E5' },
+            { fg: '#6E9DF5', bg: '#B4CEFF' },
+            { fg: '#D48BFF', bg: '#E3B4FF' },
+            { fg: '#FF8BE8', bg: '#FFB4F0' },
+            { fg: '#6EEAF5', bg: '#B4F9FF' },
+            { fg: '#6EF5C1', bg: '#B4FFE2' },
+        ];
+
+        function initColorSwitcher() {
+            const switcher = document.getElementById('colorSwitcher');
+            const root     = document.documentElement;
+            COLOR_PAIRS.forEach((pair, i) => {
+                const btn = document.createElement('button');
+                btn.className = 'swatch' + (i === 0 ? ' active' : '');
+                btn.style.backgroundColor = pair.fg;
+                btn.title = `${pair.fg} / ${pair.bg}`;
+                btn.addEventListener('click', () => {
+                    root.style.setProperty('--pixel-fg', pair.fg);
+                    root.style.setProperty('--canvas-bg', pair.bg);
+                    switcher.querySelectorAll('.swatch').forEach(s => s.classList.remove('active'));
+                    btn.classList.add('active');
+                });
+                switcher.appendChild(btn);
+            });
+            root.style.setProperty('--pixel-fg', COLOR_PAIRS[0].fg);
+            root.style.setProperty('--canvas-bg', COLOR_PAIRS[0].bg);
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            initColorSwitcher();
+            new PixelDrawingApp();
+        });
+    </script>
+</body>
+</html>
