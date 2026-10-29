@@ -2,9 +2,13 @@
 
 Draw pixel art on a grid, animate it as a scrolling wave, and export it as SVG or video. Everything lives in a single HTML file: there's nothing to build or install, and no dependencies.
 
-## Run it
+**[▶ Try it live](https://jmackow.github.io/pixel-wave/)**
 
-Open `index.html` in a browser.
+[![Pixel Wave: controls on the left, a pixel wave drawn on the canvas on the right](assets/preview.png)](https://jmackow.github.io/pixel-wave/)
+
+## Run it locally
+
+Clone the repo and open `index.html` in a browser.
 
 ## Features
 
